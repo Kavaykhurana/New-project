@@ -108,8 +108,6 @@ export function SnakeGame() {
   const gameFrameRef = useRef<HTMLDivElement>(null);
   const previousScoreRef = useRef(game.score);
   const previousStatusRef = useRef(game.status);
-  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
-
   useEffect(() => {
     if (game.score > previousScoreRef.current) {
       soundFx.playEat();
@@ -120,48 +118,6 @@ export function SnakeGame() {
     previousScoreRef.current = game.score;
     previousStatusRef.current = game.status;
   }, [game.score, game.status]);
-
-  useEffect(() => {
-    const el = gameFrameRef.current;
-    if (!el) return;
-    const preventScroll = (e: TouchEvent) => {
-      e.preventDefault();
-    };
-    el.addEventListener('touchmove', preventScroll, { passive: false });
-    return () => {
-      el.removeEventListener('touchmove', preventScroll);
-    };
-  }, []);
-
-  function handleTouchStart(e: React.TouchEvent) {
-    if (e.touches.length > 0) {
-      setTouchStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
-    }
-  }
-
-  function handleTouchEnd(e: React.TouchEvent) {
-    if (!touchStart || e.changedTouches.length === 0) return;
-    const touchEnd = { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
-    const dx = touchEnd.x - touchStart.x;
-    const dy = touchEnd.y - touchStart.y;
-    
-    if (Math.abs(dx) < 20 && Math.abs(dy) < 20) {
-      if (game.status === 'ready' || game.status === 'gameover' || game.status === 'won') {
-        handlePrimaryAction();
-      }
-      setTouchStart(null);
-      return; 
-    }
-
-    if (Math.abs(dx) > Math.abs(dy)) {
-        if (dx > 0) queueMove('right');
-        else queueMove('left');
-    } else {
-        if (dy > 0) queueMove('down');
-        else queueMove('up');
-    }
-    setTouchStart(null);
-  }
 
   function updateGame(updater: (current: SnakeState) => SnakeState) {
     setGame((current) => {
@@ -345,10 +301,51 @@ export function SnakeGame() {
       }
     }
 
+    let touchX = 0;
+    let touchY = 0;
+
+    function handleTouchStart(e: TouchEvent) {
+      if (e.touches.length > 0) {
+        touchX = e.touches[0].clientX;
+        touchY = e.touches[0].clientY;
+      }
+    }
+
+    function handleTouchMove(e: TouchEvent) {
+      // Prevent browser from native scrolling or pull-to-refresh while swiping
+      e.preventDefault();
+    }
+
+    function handleTouchEnd(e: TouchEvent) {
+      if (e.changedTouches.length === 0) return;
+      const dx = e.changedTouches[0].clientX - touchX;
+      const dy = e.changedTouches[0].clientY - touchY;
+
+      if (Math.abs(dx) < 20 && Math.abs(dy) < 20) {
+        if (gameRef.current.status === 'ready' || gameRef.current.status === 'gameover' || gameRef.current.status === 'won') {
+          applyPrimaryAction();
+        }
+        return; 
+      }
+
+      const isHorizontal = Math.abs(dx) > Math.abs(dy);
+      if (isHorizontal) {
+        applyQueuedMove(dx > 0 ? 'right' : 'left');
+      } else {
+        applyQueuedMove(dy > 0 ? 'down' : 'up');
+      }
+    }
+
     window.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('touchstart', handleTouchStart, { passive: false });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: false });
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
     };
   }, []);
 
@@ -427,8 +424,6 @@ export function SnakeGame() {
             tabIndex={0}
             aria-label="Snake board"
             className="rounded-2xl border border-brand-200/20 bg-slate-950/45 p-3 outline-none ring-brand-300/30 transition focus:ring-2 sm:p-4 touch-none"
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
           >
             <div
               className="grid aspect-square w-full gap-1 rounded-xl bg-slate-950/30 p-1"
