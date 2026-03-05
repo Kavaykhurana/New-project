@@ -141,23 +141,6 @@ export function SnakeGame() {
     gameFrameRef.current?.focus();
   }
 
-  function queueMove(direction: DirectionName) {
-    updateGame((current) => {
-      let next = current;
-
-      if (next.status === 'gameover' || next.status === 'won') {
-        next = restartSnake(GAME_CONFIG);
-      }
-
-      if (next.status === 'ready') {
-        next = startSnake(next);
-      }
-
-      return queueDirection(next, direction);
-    });
-    focusBoard();
-  }
-
   function handlePrimaryAction() {
     updateGame((current) => {
       if (current.status === 'paused') {
