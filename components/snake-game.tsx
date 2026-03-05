@@ -51,7 +51,7 @@ class SoundFX {
   
   init() {
     if (typeof window !== 'undefined' && !this.ctx) {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (AudioCtx) {
         this.ctx = new AudioCtx();
       }
@@ -74,7 +74,9 @@ class SoundFX {
       gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
       osc.start();
       osc.stop(this.ctx.currentTime + 0.1);
-    } catch(e) {}
+    } catch {
+      // Ignore audio errors
+    }
   }
 
   playGameOver() {
@@ -93,7 +95,9 @@ class SoundFX {
       gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
       osc.start();
       osc.stop(this.ctx.currentTime + 0.5);
-    } catch(e) {}
+    } catch {
+      // Ignore audio errors
+    }
   }
 }
 const soundFx = new SoundFX();
