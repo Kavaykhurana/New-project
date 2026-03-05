@@ -31,8 +31,6 @@ const GHOST_BUTTON_CLASS =
 const PRIMARY_BUTTON_CLASS =
   'inline-flex min-h-12 items-center justify-center rounded-xl border border-cyan-400/40 bg-cyan-600/20 px-6 py-3 text-sm font-bold text-cyan-50 shadow-lg shadow-cyan-900/20 transition-all hover:border-cyan-400/60 hover:bg-cyan-600/30 hover:shadow-cyan-400/10 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40';
 
-const CONTROL_BUTTON_CLASS = GHOST_BUTTON_CLASS;
-
 const DIRECTION_KEYS: Record<string, DirectionName> = {
   ArrowUp: 'up',
   ArrowDown: 'down',
@@ -48,10 +46,106 @@ const DIRECTION_KEYS: Record<string, DirectionName> = {
   D: 'right'
 };
 
+class SoundFX {
+  private ctx: AudioContext | null = null;
+  
+  init() {
+    if (typeof window !== 'undefined' && !this.ctx) {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        this.ctx = new AudioCtx();
+      }
+    }
+  }
+
+  playEat() {
+    try {
+      this.init();
+      if (!this.ctx) return;
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1200, this.ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.1);
+    } catch(e) {}
+  }
+
+  playGameOver() {
+    try {
+      this.init();
+      if (!this.ctx) return;
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.5);
+      gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.5);
+    } catch(e) {}
+  }
+}
+const soundFx = new SoundFX();
+
 export function SnakeGame() {
   const [game, setGame] = useState<SnakeState>(INITIAL_GAME_STATE);
   const gameRef = useRef(game);
   const gameFrameRef = useRef<HTMLDivElement>(null);
+  const previousScoreRef = useRef(game.score);
+  const previousStatusRef = useRef(game.status);
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (game.score > previousScoreRef.current) {
+      soundFx.playEat();
+    }
+    if (game.status === 'gameover' && previousStatusRef.current !== 'gameover') {
+      soundFx.playGameOver();
+    }
+    previousScoreRef.current = game.score;
+    previousStatusRef.current = game.status;
+  }, [game.score, game.status]);
+
+  function handleTouchStart(e: React.TouchEvent) {
+    if (e.touches.length > 0) {
+      setTouchStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+    }
+  }
+
+  function handleTouchEnd(e: React.TouchEvent) {
+    if (!touchStart || e.changedTouches.length === 0) return;
+    const touchEnd = { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+    const dx = touchEnd.x - touchStart.x;
+    const dy = touchEnd.y - touchStart.y;
+    
+    if (Math.abs(dx) < 20 && Math.abs(dy) < 20) {
+      if (game.status === 'ready' || game.status === 'gameover' || game.status === 'won') {
+        handlePrimaryAction();
+      }
+      setTouchStart(null);
+      return; 
+    }
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+        if (dx > 0) queueMove('right');
+        else queueMove('left');
+    } else {
+        if (dy > 0) queueMove('down');
+        else queueMove('up');
+    }
+    setTouchStart(null);
+  }
 
   function updateGame(updater: (current: SnakeState) => SnakeState) {
     setGame((current) => {
@@ -278,10 +372,6 @@ export function SnakeGame() {
           <div className="space-y-2">
             <p className="text-xs uppercase tracking-[0.18em] text-brand-100/75">Classic Arcade</p>
             <h1 className="text-2xl font-semibold text-brand-50 sm:text-3xl">Classic Snake</h1>
-            <p className="max-w-2xl text-sm text-brand-100/75 sm:text-base">
-              One screen, one snake, one food target. Use arrow keys or WASD to move, keep
-              growing, and avoid walls or your own tail.
-            </p>
           </div>
         </div>
       </header>
@@ -320,7 +410,9 @@ export function SnakeGame() {
             ref={gameFrameRef}
             tabIndex={0}
             aria-label="Snake board"
-            className="rounded-2xl border border-brand-200/20 bg-slate-950/45 p-3 outline-none ring-brand-300/30 transition focus:ring-2 sm:p-4"
+            className="rounded-2xl border border-brand-200/20 bg-slate-950/45 p-3 outline-none ring-brand-300/30 transition focus:ring-2 sm:p-4 touch-none"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
           >
             <div
               className="grid aspect-square w-full gap-1 rounded-xl bg-slate-950/30 p-1"
@@ -364,64 +456,6 @@ export function SnakeGame() {
             <InfoCard label="Length" value={String(game.snake.length)} />
             <InfoCard label="Speed" value={`${GAME_CONFIG.tickMs}ms`} />
           </div>
-
-          <div className="rounded-2xl border border-brand-200/20 bg-slate-950/35 p-4">
-            <p className="text-xs uppercase tracking-[0.16em] text-brand-100/70">How To Play</p>
-            <ul className="mt-3 space-y-2 text-sm text-brand-100/75">
-              <li>Move with arrow keys or WASD.</li>
-              <li>Press Space to start, pause, or resume.</li>
-              <li>Press R or Restart to reset the board.</li>
-              <li>Touch controls below work on smaller screens.</li>
-            </ul>
-          </div>
-
-          <div className="rounded-2xl border border-brand-200/20 bg-slate-950/35 p-4">
-            <p className="text-xs uppercase tracking-[0.16em] text-brand-100/70">Touch Controls</p>
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              <div />
-              <button className={CONTROL_BUTTON_CLASS} onClick={() => queueMove('up')} type="button">
-                Up
-              </button>
-              <div />
-              <button
-                className={CONTROL_BUTTON_CLASS}
-                onClick={() => queueMove('left')}
-                type="button"
-              >
-                Left
-              </button>
-              <button
-                className={CONTROL_BUTTON_CLASS}
-                disabled={
-                  game.status === 'ready' || game.status === 'gameover' || game.status === 'won'
-                }
-                onClick={handlePauseToggle}
-                type="button"
-              >
-                {game.status === 'paused' ? 'Go' : 'Pause'}
-              </button>
-              <button
-                className={CONTROL_BUTTON_CLASS}
-                onClick={() => queueMove('right')}
-                type="button"
-              >
-                Right
-              </button>
-              <div />
-              <button
-                className={CONTROL_BUTTON_CLASS}
-                onClick={() => queueMove('down')}
-                type="button"
-              >
-                Down
-              </button>
-              <button className={CONTROL_BUTTON_CLASS} onClick={handleRestart} type="button">
-                Reset
-              </button>
-            </div>
-          </div>
-
-          <p className="text-sm text-brand-100/70">{statusDescription(game)}</p>
         </aside>
       </section>
     </main>
@@ -471,26 +505,6 @@ function statusLabel(game: SnakeState): string {
   }
 
   return 'In Play';
-}
-
-function statusDescription(game: SnakeState): string {
-  if (game.status === 'ready') {
-    return 'The snake is centered and waiting. Start the round or press a direction key to begin immediately.';
-  }
-
-  if (game.status === 'paused') {
-    return 'Movement is frozen. Resume when you are ready to continue the current path.';
-  }
-
-  if (game.status === 'gameover') {
-    return 'The run ended because the snake hit a wall or collided with itself. Restart to try again.';
-  }
-
-  if (game.status === 'won') {
-    return 'Every cell is filled. Restart to generate a fresh board and food sequence.';
-  }
-
-  return 'Food spawns off the snake body, and each pickup adds one segment plus one point to the score.';
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
