@@ -121,6 +121,18 @@ export function SnakeGame() {
     previousStatusRef.current = game.status;
   }, [game.score, game.status]);
 
+  useEffect(() => {
+    const el = gameFrameRef.current;
+    if (!el) return;
+    const preventScroll = (e: TouchEvent) => {
+      e.preventDefault();
+    };
+    el.addEventListener('touchmove', preventScroll, { passive: false });
+    return () => {
+      el.removeEventListener('touchmove', preventScroll);
+    };
+  }, []);
+
   function handleTouchStart(e: React.TouchEvent) {
     if (e.touches.length > 0) {
       setTouchStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
